@@ -79,7 +79,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.meta.outputs.run_mode == 'ci_only'
-        run: npm ci
+        run: npm install --legacy-peer-deps
         
       - name: lint
         if: steps.meta.outputs.run_mode == 'ci_only'
