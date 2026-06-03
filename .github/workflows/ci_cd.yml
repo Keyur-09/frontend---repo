@@ -98,7 +98,7 @@ jobs:
 
       - name: Build project
         if: steps.meta.outputs.run_mode == 'ci_only'
-        run: npm run build
+        run: CI=false npm run build
 
       # =========================================================
       # DOCKER BUILD / PUSH SECTION
