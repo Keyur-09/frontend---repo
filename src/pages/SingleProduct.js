@@ -25,7 +25,7 @@ import {
 } from "../features/user/userSlice";
 import Zoom from "react-medium-image-zoom";
 import "react-medium-image-zoom/dist/styles.css";
-const SingleProduct = () => {no
+const SingleProduct = () => {
   const [color, setColor] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [alreadyAdded, setAlreadyAdded] = useState(false);
