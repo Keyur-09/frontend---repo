@@ -1,27 +1,30 @@
-name : ci_cd pipeline
+name: ci_cd pipeline
+
 on:
   push:
-    branches: [ "**" ]
+    branches:
+      - "**"
 
   workflow_dispatch:
     inputs:
       environment:
-        description: 'target environment'
+        description: "target environment"
         required: true
-        default: 'staging'
+        default: "staging"
         type: choice
         options:
           - staging
           - production
+
       run_mode:
-        description: "ci_only = lint/build only, ci_cd = build/push/deploy"    
+        description: "ci_only = lint/build only, ci_cd = build/push/deploy"
         required: false
         default: "ci_only"
         type: choice
         options:
           - ci_only
           - ci_cd
-      
+
       deploy_reason:
         description: "reason for deployment (optional)"
         required: false
@@ -30,6 +33,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  packages: write
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -40,107 +44,129 @@ jobs:
     runs-on: ubuntu-latest
 
     environment: >-
-      ${{ 
+      ${{
         github.event_name == 'workflow_dispatch' && github.event.inputs.environment ||
-        (github.ref == 'refs/heads/main' && 'production' || 'development') 
+        (github.ref == 'refs/heads/main' && 'production' || 'development')
       }}
 
     env:
       REGISTRY: ghcr.io
       IMAGE_OWNER: ${{ github.repository_owner }}
-      IMAGE_NAME: ${{ github.repository }}  
-      
+      IMAGE_NAME: ${{ github.event.repository.name }}
+
     steps:
+      # ---------------- Checkout ----------------
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
+      # ---------------- Metadata ----------------
       - name: Set metadata
         id: meta
         run: |
-          echo "run_mode=${{ github.event.inputs.run_mode || 'ci_only' }}" >> $GITHUB_OUTPUT  
-      
+          echo "run_mode=${{ github.event.inputs.run_mode || 'ci_only' }}" >> $GITHUB_OUTPUT
+
+      # ---------------- Docker metadata ----------------
       - name: Set Docker metadata
         id: docker_meta
         run: |
-          if [[ "${{ github.event.inputs.run_mode }}" == "ci_cd" ]]; then
+          if [[ "${{ github.event.inputs.run_mode || 'ci_only' }}" == "ci_cd" ]]; then
             echo "SHOULD_BUILD_AND_PUSH=true" >> $GITHUB_OUTPUT
             echo "FULL_IMAGE=ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}" >> $GITHUB_OUTPUT
           else
-          echo "SHOULD_BUILD_AND_PUSH=false" >> $GITHUB_OUTPUT
-          fi    
+            echo "SHOULD_BUILD_AND_PUSH=false" >> $GITHUB_OUTPUT
+          fi
 
- #----------------------ci_only (no docker)--------------------------
+      # =========================================================
+      # CI ONLY SECTION
+      # =========================================================
+
       - name: Set up Node.js
         if: steps.meta.outputs.run_mode == 'ci_only'
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         if: steps.meta.outputs.run_mode == 'ci_only'
-        run: npm install --legacy-peer-deps
-        
-      - name: Build
+        run: npm ci --legacy-peer-deps
+
+      - name: Verify react-scripts
+        if: steps.meta.outputs.run_mode == 'ci_only'
+        run: npm list react-scripts
+
+      - name: Build project
         if: steps.meta.outputs.run_mode == 'ci_only'
         run: npm run build
-        
-#---------------------- docker build/push ------------------------------
+
+      # =========================================================
+      # DOCKER BUILD / PUSH SECTION
+      # =========================================================
+
       - name: Set up Docker Buildx
-        if: steps.meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
+        if: steps.docker_meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
-        if: steps.meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
+        if: steps.docker_meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: build image (scan only)
-        if: steps.meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
+      - name: Build Docker image (scan only)
+        if: steps.docker_meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
         uses: docker/build-push-action@v6
         with:
-            context: .
-            push: false
-            load: true
-            tags: scan-target:local
-            build-args: |
-                    NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }}
-                    BUILD_DATE=${{ github.run_started_at }}
-                    VCS_REF=${{ github.sha }}
-                    CACHE_BUST=${{ github.run_id }}
-            cache-from: type=gha
-            cache-to: type=gha,mode=max 
-            sbom: false
-            provenance: false 
+          context: .
+          push: false
+          load: true
+          tags: scan-target:local
+
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+            BUILD_DATE=${{ github.run_started_at }}
+            VCS_REF=${{ github.sha }}
+            CACHE_BUST=${{ github.run_id }}
+
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+          sbom: false
+          provenance: false
 
       - name: Trivy image scan
-        if: steps.meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
+        if: steps.docker_meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
         uses: aquasecurity/trivy-action@v0.35.0
         with:
-            image-ref: scan-target:local
-            format: table
-            exit-code: "1"
-            ignore-unfixed: true
-            severity: CRITICAL    
+          image-ref: scan-target:local
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL
 
-      - name: Tag image 
-        if: steps.meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
+      - name: Tag Docker image
+        if: steps.docker_meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
         run: |
-              docker tag scan-target:local ${{ steps.meta.outputs.FULL_IMAGE }}
-    
-      - name: Push image
-        if: steps.meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
+          docker tag scan-target:local ${{ steps.docker_meta.outputs.FULL_IMAGE }}
+
+      - name: Push Docker image
+        if: steps.docker_meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
         run: |
-            docker push ${{ steps.meta.outputs.FULL_IMAGE }}
+          docker push ${{ steps.docker_meta.outputs.FULL_IMAGE }}
 
       - name: Tag as latest (main & develop)
-        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && steps.meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
+        if: |
+          (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') &&
+          steps.docker_meta.outputs.SHOULD_BUILD_AND_PUSH == 'true'
         run: |
-          docker pull ${{ steps.meta.outputs.FULL_IMAGE }}
-          docker tag ${{ steps.meta.outputs.FULL_IMAGE }} ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:latest
-          docker push ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:latest
+          docker pull ${{ steps.docker_meta.outputs.FULL_IMAGE }}
 
-    
+          docker tag \
+          ${{ steps.docker_meta.outputs.FULL_IMAGE }} \
+          ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:latest
+
+          docker push \
+          ghcr.io/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:latest

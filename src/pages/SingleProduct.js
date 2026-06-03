@@ -3,7 +3,7 @@ import ReactStars from "react-rating-stars-component";
 import BreadCrumb from "../components/BreadCrumb";
 import Meta from "../components/Meta";
 import ProductCard from "../components/ProductCard";
-import ReactImageZoom from "react-image-zoom";
+
 import Color from "../components/Color";
 import { TbGitCompare } from "react-icons/tb";
 import { AiOutlineHeart, AiFillHeart } from "react-icons/ai";
@@ -23,8 +23,9 @@ import {
   getUserCart,
   updateCartProduct,
 } from "../features/user/userSlice";
-import ReactImageMagnify from "react-image-magnify";
-const SingleProduct = () => {
+import Zoom from "react-medium-image-zoom";
+import "react-medium-image-zoom/dist/styles.css";
+const SingleProduct = () => {no
   const [color, setColor] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [alreadyAdded, setAlreadyAdded] = useState(false);
