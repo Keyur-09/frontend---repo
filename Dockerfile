@@ -21,9 +21,10 @@
     
     RUN npm install --only=production --legacy-peer-deps
     
-    COPY --from=build /app ./
+    COPY --from=build /app .
+    
+    ENV HOST=0.0.0.0
     
     EXPOSE 3000
     
-    CMD ["sh", "-c", "HOST=0.0.0.0 npm start"]
-    
+    CMD ["npm", "start"]
