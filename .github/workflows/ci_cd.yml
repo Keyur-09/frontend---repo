@@ -63,7 +63,7 @@ jobs:
       - name: Set metadata
         id: meta
         run: |
-          echo "run_mode=${{ github.event.inputs.run_mode || 'ci_only' }}" >> $GITHUB_OUTPUT
+          echo "run_mode=ci_cd" >> $GITHUB_OUTPUT
 
       # ---------------- Docker metadata ----------------
       - name: Set Docker metadata
