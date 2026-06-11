@@ -50,9 +50,9 @@
         }}
 
       env:
-        REGISTRY: ghcr.io
-        IMAGE_OWNER: ${{ github.repository_owner }}
-        IMAGE_NAME: ${{ github.event.repository.name }}
+        REGISTRY: ${{ vars.REGISTRY }}
+        IMAGE_OWNER: ${{ vars.IMAGE_OWNER }}
+        IMAGE_NAME: ${{ vars.IMAGE_NAME }}
 
       steps:
         # ---------------- Checkout ----------------
